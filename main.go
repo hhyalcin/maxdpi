@@ -38,5 +38,6 @@ func main() {
 
 	if err != nil {
 		println("Error:", err.Error())
+		logStartupError(err) // GUI exe'de konsol yok; hata sessizce kaybolmasin
 	}
 }

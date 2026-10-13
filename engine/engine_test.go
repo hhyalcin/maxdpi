@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -206,7 +207,7 @@ func TestConfigRoundTripAndRobustness(t *testing.T) {
 		t.Errorf("round-trip basarisiz: %+v", got)
 	}
 	st, err := os.Stat(p)
-	if err != nil || st.Mode().Perm() != 0o600 {
+	if err != nil || (runtime.GOOS != "windows" && st.Mode().Perm() != 0o600) { // Windows Unix izin bitlerini tutmaz
 		t.Errorf("izin 0600 olmali: %v %v", st, err)
 	}
 	// Bozuk ve asiri buyuk dosya: panik/hata yok, bos Config

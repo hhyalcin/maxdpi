@@ -27,3 +27,15 @@ func LaunchDiscord(proxyAddr string) error {
 		"--env", "https_proxy="+u, "--env", "http_proxy="+u,
 		"--args", "--proxy-server="+u).Run()
 }
+
+// LaunchDiscordDirect: macOS motoru her zaman yerel onyuz kullanir; sistem geneli mod yoktur.
+func LaunchDiscordDirect() error { return errors.New("desteklenmiyor") }
+
+// RestoreSystemProxy: Windows'ta WinINet proxy'sini geri yukler; macOS sistem proxy'sine dokunmaz, no-op.
+func RestoreSystemProxy() {}
+
+// RecoverSystemProxy: macOS'ta sistem proxy'sine dokunulmaz, no-op.
+func RecoverSystemProxy() {}
+
+// RestoreDiscordSettings: macOS'ta no-op.
+func RestoreDiscordSettings() {}

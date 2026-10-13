@@ -6,3 +6,8 @@ frontend/package.json.md5
 # Motor binary'leri scripts/build-engines.sh ile sabit commit'ten kaynaktan uretilir; depoya girmez.
 engine/bin_darwin/
 engine/bin_windows/
+dist-test/
+*.exe~
+build/bin/
+build/windows/installer/tmp/
+tmp_harness/

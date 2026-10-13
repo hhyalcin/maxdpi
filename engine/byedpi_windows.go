@@ -20,9 +20,9 @@ var ciadpiBin []byte
 
 const ciadpiName = "ciadpi.exe"
 
-// DefaultProfiles: ByeDPI README'sine gore Windows'ta saf kullanici-alani yontemleri (tlsrec/split/oob) once,
-// disorder/fake ("Windows'ta kararsiz olabilir") sonra denenir. Gercek Windows testi gerekir.
-var DefaultProfiles = []Profile{
+// byeDPIProfiles: ciadpi (proxy) motoru icin profiller. Windows'ta artik varsayilan degil (bkz. goodbyedpi_windows.go);
+// yonetici izni olmayan bir yedek motor eklenirse kullanilir.
+var byeDPIProfiles = []Profile{
 	{Name: "split+tlsrec", Args: []string{"--split", "2", "--tlsrec", "3+s"}},
 	{Name: "oob", Args: []string{"--oob", "1"}},
 	{Name: "disorder+tlsrec", Args: []string{"--disorder", "1", "--tlsrec", "1+s"}},

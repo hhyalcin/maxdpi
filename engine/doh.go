@@ -14,7 +14,13 @@ import (
 )
 
 // IP ile erisilir: DoH sunucusunu bulmak icin sistem DNS'ine (engelli) ihtiyac duyulmaz.
-const dohEndpoint = "https://1.1.1.1/dns-query"
+// Sirayla denenir (Cloudflare, sonra Google); hepsi JSON API sunar.
+var dohEndpoints = []string{
+	"https://1.1.1.1/dns-query",
+	"https://1.0.0.1/dns-query",
+	"https://8.8.8.8/resolve",
+	"https://8.8.4.4/resolve",
+}
 
 type cacheEntry struct {
 	ips []net.IP
@@ -31,11 +37,11 @@ type Resolver struct {
 func NewResolver() *Resolver {
 	return &Resolver{
 		client: &http.Client{
-			Timeout: 6 * time.Second,
+			Timeout: 3 * time.Second, // sunucu basina; yedeklere gecmek icin kisa
 			Transport: &http.Transport{
 				Proxy:                 nil, // sistem proxy'sine (kendimize) donmeyelim
-				TLSHandshakeTimeout:   5 * time.Second,
-				ResponseHeaderTimeout: 5 * time.Second,
+				TLSHandshakeTimeout:   2 * time.Second,
+				ResponseHeaderTimeout: 2 * time.Second,
 			},
 		},
 		cache: make(map[string]cacheEntry),
@@ -57,6 +63,29 @@ func isPublicIP(ip net.IP) bool {
 		ip.IsUnspecified() || ip.IsMulticast())
 }
 
+// query: tek DoH sunucusuna sorar; ISS bir sunucuyu keserse Lookup siradakine gecer.
+func (r *Resolver) query(ctx context.Context, endpoint, host string, dr *dohResponse) error {
+	q := url.Values{"name": {host}, "type": {"A"}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+"?"+q.Encode(), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Accept", "application/dns-json")
+
+	resp, err := r.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("doh istegi: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("doh durum kodu: %d", resp.StatusCode)
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(dr); err != nil {
+		return fmt.Errorf("doh cevabi: %w", err)
+	}
+	return nil
+}
+
 func (r *Resolver) Lookup(ctx context.Context, host string) ([]net.IP, error) {
 	if host == "" || len(host) > 253 {
 		return nil, errors.New("gecersiz host")
@@ -69,25 +98,18 @@ func (r *Resolver) Lookup(ctx context.Context, host string) ([]net.IP, error) {
 	}
 	r.mu.Unlock()
 
-	q := url.Values{"name": {host}, "type": {"A"}}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, dohEndpoint+"?"+q.Encode(), nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Accept", "application/dns-json")
-
-	resp, err := r.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("doh istegi: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("doh durum kodu: %d", resp.StatusCode)
-	}
-
 	var dr dohResponse
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&dr); err != nil {
-		return nil, fmt.Errorf("doh cevabi: %w", err)
+	var lastErr error
+	for _, ep := range dohEndpoints {
+		if ctx.Err() != nil {
+			break
+		}
+		if lastErr = r.query(ctx, ep, host, &dr); lastErr == nil {
+			break
+		}
+	}
+	if lastErr != nil {
+		return nil, lastErr
 	}
 
 	var ips []net.IP

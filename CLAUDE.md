@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Proje
 
-MaxDPI: Türkiye'de erişim engelli Discord'u tek tıkla açan masaüstü uygulaması (Wails v2 + Go, ByeDPI gömülü). macOS'ta gerçek engelde giriş, mesaj ve sesli kanal doğrulandı. **Windows hiç çalıştırılmadı**, yalnızca çapraz derleniyor. Dizin adı (`discord-unblock`) eski; modül/uygulama adı `maxdpi`, bundle kimliği `com.maxdpi.app`.
+MaxDPI: Türkiye'de erişim engelli Discord'u tek tıkla açan masaüstü uygulaması (Wails v2 + Go, ByeDPI gömülü). macOS'ta gerçek engelde giriş, mesaj ve sesli kanal doğrulandı. **Windows'ta farklı motor kullanılır:** gömülü GoodbyeDPI + WinDivert (paket seviyesi, sistem geneli, yönetici izni gerekir); gerçek hatta Bağlan, Discord güncelleyicisi, giriş ve ses doğrulandı (2026-10-13). Dizin adı (`discord-unblock`) eski; modül/uygulama adı `maxdpi`, bundle kimliği `com.maxdpi.app`.
 
 ## Komutlar
 
@@ -27,6 +27,10 @@ wails build -platform windows/amd64   # build/bin/maxdpi.exe (macOS'tan çapraz)
 
 ## Mimari
 
+**Windows (GoodbyeDPI, sistem geneli):** `engine/goodbyedpi_windows.go` `GoodbyeDPI` motoru `engine/gdpi_windows/` altındaki gömülü `goodbyedpi.exe` + `WinDivert.dll` + `WinDivert64.sys` dosyalarını `%LOCALAPPDATA%\maxdpi\gdpi\` altına çıkarıp çalıştırır (Desktop\dip'teki GoodbyeDPI 0.2.3rc3 TR sürümü; lisanslar `licenses/third_party/`). `Start` boş adres döner (`engine.IsSystemWide`): yerel önyüz/DoH yok, `App.Connect` `engine.ProbeDirect` ile `discord.com` ve `updates.discord.com`'u sistem DNS'i + doğrudan TLS ile sınar, `OpenDiscord` `LaunchDiscordDirect` ile Discord'u proxy'siz açar. Profiller (`DefaultProfiles`): `-9`, `-5`, `--set-ttl 3`, `-5 --set-ttl 5` (hepsi Yandex DNS 77.88.8.8:1253 yönlendirmeli) + yönlendirmesiz `-9`/`-5`. Manifest `requireAdministrator` ister (`build/windows/wails.exe.manifest`); `Start` yönetici değilse hata verir. Neden proxy değil: Discord'un gömülü güncelleyicisi (`updater_client`) `--proxy-server`, `HTTP(S)_PROXY` ve WinINet proxy'sini yok sayıp doğrudan `updates.discord.com`'a bağlanır, zehirli DNS yüzünden "güvenilmeyen kök sertifika" ile sonsuz Update failed döngüsüne girer (SKIP_HOST_UPDATE de bu sürümde (93145) engellemez). Ciadpi proxy kodu (`byedpi*.go`, `socks.go`, `doh.go`) macOS için duruyor; Windows'ta kullanılmaz. Başka WinDivert/GoodbyeDPI çalışırken çakışır; `Start` `goodbyedpi.exe` süreçlerini öldürür, takılı `windivert` hizmetini başarısızlıkta siler. Antivirüs `WinDivert64.sys`'i karantinaya alabilir; Kaspersky ile çalışmaz.
+
+**macOS (ByeDPI proxy):**
+
 Discord'un TCP trafiği yerel bir önyüzden geçer; önyüz DNS'i kendisi (DoH) çözer ve bağlantıyı ByeDPI'ye IP olarak verir. Sistem proxy'sine dokunulmaz.
 
 `App.Connect` (`app.go`): DoH ön kontrolü (profilden bağımsız, 8 sn) → profilleri sırala (`engine.OrderProfiles`, kayıtlı profil önde) → her biri için `ByeDPI.Start` + `engine.Probe` → ilk çalışanla `engine.StartFrontend` → profil adını kaydet. `OpenDiscord` Discord'u önyüze yönlendirerek başlatır.
@@ -39,6 +43,7 @@ Discord'un TCP trafiği yerel bir önyüzden geçer; önyüz DNS'i kendisi (DoH)
 ## Kolay kaçırılan tuzaklar
 
 - **Discord güncelleyicisi (`updater.node`, Rust/reqwest) yalnızca `HTTP(S)_PROXY` okur.** `--proxy-server` ve sistem PAC'ı onu etkilemez; bu yüzden `LaunchDiscord` ikisini birden verir. Ortam değişkenleri ve argüman yalnızca yeni başlayan sürece uygulanır; Discord zaten açıksa `open` bunları iletmez, bu yüzden `LaunchDiscord` açık Discord'u reddeder.
+- **(Yalnız Windows proxy yolu; artık varsayılan değil, bkz. yukarıdaki GoodbyeDPI notu)** `updater_client` yalnızca WinINet sistem proxy'sini kullanır** (env/`--proxy-server` yok sayılır; yoksa "güvenilmeyen kök sertifika" ile sonsuz Update failed — gerçek hatta doğrulandı). Bu yüzden Discord çalıştığı sürece `settings.json`'a `SKIP_HOST_UPDATE` yazılır (varsayılan, `watchDiscord` kapanınca geri alır). Yalnızca-HTTPS (`https=127.0.0.1:port`) WinINet proxy'si varsayılan **kapalı**dır (tüm uygulamaları etkiler); `MAXDPI_SYSTEM_PROXY=1` açar. DoH `engine/doh.go`'da 4 sunucu arasında yedekli (Cloudflare, Google). Önceki değer `config/maxdpi/proxy_backup.json`'a yazılır, çökme sonrası açılışta `RecoverSystemProxy` geri yükler.
 - **Ses sinyali Cloudflare alt portlarını kullanır** (`c-*.discord.media`: 2083/2087/8443...). Port kısıtı gevşetilirse ses "bağlanıyor/kesildi" döngüsüne girer. Ses UDP'si proxy'den geçmez ve bu hatta engelli değildir; UDP'yi suçlamadan önce `debug.log`'a bak.
 - **`killStale` aynı yoldaki tüm `ciadpi` süreçlerini öldürür.** Çalışan bir oturum varken genel `pkill ciadpi` çalıştırma; testler `isolate(t)` ile `HOME`'u geçici dizine alır, uygulama `SingleInstanceLock` kullanır.
 - `ciadpi` varsayılan olarak `0.0.0.0` dinler (`-i 127.0.0.1` zorunlu) ve SIGTERM'i yok sayar (`Kill` kullanılır).

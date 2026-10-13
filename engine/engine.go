@@ -15,6 +15,13 @@ type Engine interface {
 	Stop() error
 }
 
+// IsSystemWide: motor paketleri sistem genelinde degistiriyorsa (Windows/GoodbyeDPI) proxy onyuzu gerekmez;
+// Start bos adres doner ve Discord proxy'siz baslatilir.
+func IsSystemWide(e Engine) bool {
+	s, ok := e.(interface{ SystemWide() bool })
+	return ok && s.SystemWide()
+}
+
 // discordSuffixes: DoH + motor uzerinden gidecek alan adlari. Digerleri dogrudan baglanir.
 var discordSuffixes = []string{
 	"discord.com", "discord.gg", "discordapp.com", "discordapp.net",
