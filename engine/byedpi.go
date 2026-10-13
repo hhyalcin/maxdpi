@@ -28,7 +28,7 @@ func extract() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(base, "discord-unblock")
+	dir := filepath.Join(base, "maxdpi")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}

@@ -17,7 +17,7 @@ func configPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(base, "discord-unblock", "config.json"), nil
+	return filepath.Join(base, "maxdpi", "config.json"), nil
 }
 
 // LoadConfig: dosya yok/bozuk/asiri buyukse bos Config doner (hata kullaniciya yansimaz).

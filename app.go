@@ -6,7 +6,10 @@ import (
 	"sync"
 	"time"
 
-	"discord-unblock/engine"
+	"maxdpi/engine"
+
+	"github.com/wailsapp/wails/v2/pkg/options"
+	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // App: arayuzun cagirdigi Baglan/Kes mantigi.
@@ -25,6 +28,12 @@ func NewApp() *App {
 }
 
 func (a *App) startup(ctx context.Context) { a.ctx = ctx }
+
+// secondInstance: ikinci kez acilirsa yeni ornek acilmaz (yetim motor temizligi calisan motoru oldurmesin); mevcut pencere one gelir.
+func (a *App) secondInstance(options.SecondInstanceData) {
+	wruntime.WindowUnminimise(a.ctx)
+	wruntime.Show(a.ctx)
+}
 
 // shutdown: pencere kapaninca motoru ve onyuzu temizler.
 func (a *App) shutdown(ctx context.Context) { a.Disconnect() }
@@ -106,4 +115,20 @@ func (a *App) OpenDiscord() error {
 		return errors.New("once baglanin")
 	}
 	return engine.LaunchDiscord(f.Addr())
+}
+
+// links: arayuzden acilabilen harici adresler. Arayuz yalnizca kimlik gonderir, keyfi URL kabul edilmez.
+var links = map[string]string{
+	"site":      "https://maxicode.com.tr/",
+	"instagram": "https://www.instagram.com/hh_yalcin/",
+}
+
+// OpenLink: sabit tablodaki adresi varsayilan tarayicida acar.
+func (a *App) OpenLink(id string) error {
+	u, ok := links[id]
+	if !ok {
+		return errors.New("bilinmeyen baglanti")
+	}
+	wruntime.BrowserOpenURL(a.ctx, u)
+	return nil
 }

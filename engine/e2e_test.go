@@ -11,10 +11,10 @@ import (
 	"time"
 )
 
-// Gercek engelli hatta calisir: DU_E2E=1 go test ./engine -run E2E -v
+// Gercek engelli hatta calisir: MAXDPI_E2E=1 go test ./engine -run E2E -v
 func TestE2EDiscordViaFrontend(t *testing.T) {
-	if os.Getenv("DU_E2E") != "1" {
-		t.Skip("DU_E2E=1 degil")
+	if os.Getenv("MAXDPI_E2E") != "1" {
+		t.Skip("MAXDPI_E2E=1 degil")
 	}
 	r := NewResolver()
 	b := &ByeDPI{}

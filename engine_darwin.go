@@ -2,6 +2,6 @@
 
 package main
 
-import "discord-unblock/engine"
+import "maxdpi/engine"
 
 func newEngine() engine.Engine { return &engine.ByeDPI{} }

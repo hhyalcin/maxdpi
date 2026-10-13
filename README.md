@@ -1,4 +1,4 @@
-# Discord Unblock
+# MaxDPI
 
 Türkiye'de erişim engeli olan Discord'u tek tıkla açan masaüstü uygulaması (macOS + Windows).
 
@@ -23,9 +23,9 @@ Windows motoru için `brew install mingw-w64`.
 ## Test
 ```sh
 go test ./engine
-DU_E2E=1 go test ./engine -run E2E -v     # gerçek engelli hatta, ağ gerekir
+MAXDPI_E2E=1 go test ./engine -run E2E -v     # gerçek engelli hatta, ağ gerekir
 ```
-Teşhis günlüğü: `DU_DEBUG=1` ile `<önbellek dizini>/discord-unblock/debug.log`.
+Teşhis günlüğü: `MAXDPI_DEBUG=1` ile `<önbellek dizini>/maxdpi/debug.log`.
 
 ## Durum
 macOS: gerçek engelde giriş, mesaj ve sesli kanal doğrulandı. Windows: derleniyor, henüz çalıştırılıp doğrulanmadı.

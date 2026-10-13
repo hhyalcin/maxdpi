@@ -8,4 +8,6 @@ export function Disconnect():Promise<main.Status>;
 
 export function OpenDiscord():Promise<void>;
 
+export function OpenLink(arg1:string):Promise<void>;
+
 export function Status():Promise<main.Status>;

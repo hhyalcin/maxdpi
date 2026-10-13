@@ -12,8 +12,16 @@ import (
 
 func alive(pid int) bool { return syscall.Kill(pid, 0) == nil }
 
+// isolate: HOME gecici dizine alinir; motor yolu degisir, boylece killStale/pgrep kullanicinin calisan
+// oturumundaki motora dokunmaz.
+func isolate(t *testing.T) {
+	t.Helper()
+	t.Setenv("HOME", t.TempDir())
+}
+
 // Tekrarli Baglan/Kes: surec, port ve goroutine sizintisi olmamali.
 func TestLifecycleCycles(t *testing.T) {
+	isolate(t)
 	before := runtime.NumGoroutine()
 	for i := 0; i < 20; i++ {
 		b := &ByeDPI{}
@@ -41,13 +49,18 @@ func TestLifecycleCycles(t *testing.T) {
 	if after := runtime.NumGoroutine(); after > before+3 {
 		t.Errorf("goroutine sizintisi: %d -> %d", before, after)
 	}
-	if out, _ := exec.Command("/usr/bin/pgrep", "-f", "Caches/discord-unblock/ciadpi").Output(); len(out) > 0 {
+	path, err := extract()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out, _ := exec.Command("/usr/bin/pgrep", "-f", path).Output(); len(out) > 0 {
 		t.Errorf("yetim ciadpi kaldi: %s", out)
 	}
 }
 
 // Cokme benzetimi: Stop cagrilmadan yeni oturum baslayinca eski yetim motor temizlenmeli.
 func TestOrphanCleanupOnNextStart(t *testing.T) {
+	isolate(t)
 	old := &ByeDPI{}
 	if _, err := old.Start(DefaultProfiles[0]); err != nil {
 		t.Fatal(err)
@@ -70,6 +83,7 @@ func TestOrphanCleanupOnNextStart(t *testing.T) {
 
 // Ayni ByeDPI ornegi iki kez Start edilemez.
 func TestDoubleStartRejected(t *testing.T) {
+	isolate(t)
 	b := &ByeDPI{}
 	if _, err := b.Start(DefaultProfiles[0]); err != nil {
 		t.Fatal(err)

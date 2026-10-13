@@ -97,9 +97,9 @@ func (f *Frontend) serve() {
 	}
 }
 
-// debug: DU_DEBUG=1 iken Discord'a yonlenen baglantilar <onbellek dizini>/discord-unblock/debug.log'a yazilir
+// debug: MAXDPI_DEBUG=1 iken Discord'a yonlenen baglantilar <onbellek dizini>/maxdpi/debug.log'a yazilir
 // (yalnizca Discord alan adlari ve IP'ler). Windows'ta GUI uygulamasinin stderr'i gorunmedigi icin dosyaya yazilir.
-var debug = os.Getenv("DU_DEBUG") == "1"
+var debug = os.Getenv("MAXDPI_DEBUG") == "1"
 
 func init() {
 	if !debug {
@@ -109,7 +109,7 @@ func init() {
 	if err != nil {
 		return
 	}
-	dir := filepath.Join(base, "discord-unblock")
+	dir := filepath.Join(base, "maxdpi")
 	if os.MkdirAll(dir, 0o700) != nil {
 		return
 	}

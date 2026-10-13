@@ -14,6 +14,10 @@ export function OpenDiscord() {
   return window['go']['main']['App']['OpenDiscord']();
 }
 
+export function OpenLink(arg1) {
+  return window['go']['main']['App']['OpenLink'](arg1);
+}
+
 export function Status() {
   return window['go']['main']['App']['Status']();
 }

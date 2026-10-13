@@ -1,4 +1,4 @@
-module discord-unblock
+module maxdpi
 
 go 1.26.0
 

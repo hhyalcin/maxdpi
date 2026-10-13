@@ -1,6 +1,6 @@
 import './style.css';
 
-import {Connect, Disconnect, OpenDiscord, Status} from '../wailsjs/go/main/App';
+import {Connect, Disconnect, OpenDiscord, OpenLink, Status} from '../wailsjs/go/main/App';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const dot = $('dot'), state = $('state'), detail = $('detail');
@@ -40,6 +40,15 @@ open.addEventListener('click', async () => {
     } catch (e) {
         detail.textContent = String(e);
     }
+});
+
+// Harici baglantilar uygulama icinde degil, varsayilan tarayicida acilir.
+// Arayuz yalnizca sabit bir kimlik gonderir; URL Go tarafindaki tablodan gelir.
+document.querySelectorAll<HTMLAnchorElement>('a[data-link]').forEach((a) => {
+    a.addEventListener('click', (e) => {
+        e.preventDefault();
+        OpenLink(a.dataset.link!).catch((err) => { detail.textContent = String(err); });
+    });
 });
 
 Status().then((s) => {

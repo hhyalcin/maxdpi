@@ -17,16 +17,20 @@ func main() {
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:         "Discord Unblock",
+		Title:         "MaxDPI",
 		Width:         380,
-		Height:        320,
+		Height:        400,
 		DisableResize: true,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
 		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
-		OnStartup:        app.startup,
-		OnShutdown:       app.shutdown,
+		SingleInstanceLock: &options.SingleInstanceLock{
+			UniqueId:               "com.maxdpi.app.7f3a9c",
+			OnSecondInstanceLaunch: app.secondInstance,
+		},
+		OnStartup:  app.startup,
+		OnShutdown: app.shutdown,
 		Bind: []interface{}{
 			app,
 		},
