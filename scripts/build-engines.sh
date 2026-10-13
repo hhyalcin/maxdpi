@@ -18,11 +18,15 @@ if [ "$GOT" != "$BYEDPI_COMMIT" ]; then
   exit 1
 fi
 
-# macOS: yerel derleme
+# macOS: evrensel (arm64 + x86_64) ikili; Intel ve Apple Silicon'da ayni uygulama calissin
 if [ "$(uname -s)" = "Darwin" ]; then
-  make -C "$WORK/byedpi" >/dev/null
+  for arch in arm64 x86_64; do
+    make -C "$WORK/byedpi" clean >/dev/null 2>&1 || true
+    make -C "$WORK/byedpi" CC="cc -arch $arch" >/dev/null
+    cp "$WORK/byedpi/ciadpi" "$WORK/ciadpi-$arch"
+  done
   mkdir -p "$ROOT/engine/bin_darwin"
-  cp "$WORK/byedpi/ciadpi" "$ROOT/engine/bin_darwin/ciadpi"
+  lipo -create -output "$ROOT/engine/bin_darwin/ciadpi" "$WORK/ciadpi-arm64" "$WORK/ciadpi-x86_64"
   chmod 0755 "$ROOT/engine/bin_darwin/ciadpi"
   shasum -a 256 "$ROOT/engine/bin_darwin/ciadpi"
 fi
