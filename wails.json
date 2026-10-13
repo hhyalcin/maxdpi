@@ -1,0 +1,13 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "discord-unblock",
+  "outputfilename": "discord-unblock",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "Hasan Hüdai Yalçın",
+    "email": "196319975+hhyalcin@users.noreply.github.com"
+  }
+}
