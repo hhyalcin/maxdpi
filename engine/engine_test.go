@@ -1,9 +1,11 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"net"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -164,5 +166,61 @@ func TestPortAllowed(t *testing.T) {
 		if got := portAllowed(c.host, c.ip, c.port); got != c.want {
 			t.Errorf("portAllowed(%q,%v,%d)=%v, want %v", c.host, c.ip, c.port, got, c.want)
 		}
+	}
+}
+
+func TestOrderProfiles(t *testing.T) {
+	all := []Profile{{Name: "a"}, {Name: "b"}, {Name: "c"}}
+	names := func(ps []Profile) string {
+		var s []string
+		for _, p := range ps {
+			s = append(s, p.Name)
+		}
+		return strings.Join(s, ",")
+	}
+	cases := map[string]string{
+		"":           "a,b,c",
+		"b":          "b,a,c",
+		"c":          "c,a,b",
+		"a":          "a,b,c",
+		"bilinmeyen": "a,b,c", // dosyadaki taninmayan ad yok sayilir
+	}
+	for pref, want := range cases {
+		if got := names(OrderProfiles(all, pref)); got != want {
+			t.Errorf("OrderProfiles(%q)=%s, want %s", pref, got, want)
+		}
+	}
+}
+
+func TestConfigRoundTripAndRobustness(t *testing.T) {
+	dir := t.TempDir()
+	p := dir + "/sub/config.json"
+
+	if got := loadConfigFrom(p); got.Profile != "" {
+		t.Errorf("dosya yokken bos beklenirdi: %+v", got)
+	}
+	if err := saveConfigTo(p, Config{Profile: "oob"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := loadConfigFrom(p); got.Profile != "oob" {
+		t.Errorf("round-trip basarisiz: %+v", got)
+	}
+	st, err := os.Stat(p)
+	if err != nil || st.Mode().Perm() != 0o600 {
+		t.Errorf("izin 0600 olmali: %v %v", st, err)
+	}
+	// Bozuk ve asiri buyuk dosya: panik/hata yok, bos Config
+	if err := os.WriteFile(p, []byte("{bozuk"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := loadConfigFrom(p); got.Profile != "" {
+		t.Errorf("bozuk dosyada bos beklenirdi: %+v", got)
+	}
+	big := append([]byte(`{"profile":"`), bytes.Repeat([]byte("x"), 1<<20)...)
+	if err := os.WriteFile(p, append(big, []byte(`"}`)...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := loadConfigFrom(p); got.Profile != "" {
+		t.Errorf("asiri buyuk dosyada bos beklenirdi, uzunluk=%d", len(got.Profile))
 	}
 }

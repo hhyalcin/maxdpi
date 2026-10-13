@@ -57,7 +57,8 @@ func (a *App) Connect() (Status, error) {
 		return Status{}, errors.New("DNS-over-HTTPS erisilemiyor: internet baglantisini kontrol edin")
 	}
 
-	for _, p := range engine.DefaultProfiles {
+	cfg := engine.LoadConfig()
+	for _, p := range engine.OrderProfiles(engine.DefaultProfiles, cfg.Profile) {
 		addr, err := a.eng.Start(p)
 		if err != nil {
 			continue
@@ -75,6 +76,9 @@ func (a *App) Connect() (Status, error) {
 			return Status{}, errors.New("yerel proxy baslatilamadi")
 		}
 		a.front, a.profile = f, p.Name
+		if cfg.Profile != p.Name {
+			_ = engine.SaveConfig(engine.Config{Profile: p.Name}) // kayit basarisizsa bir sonraki acilista yeniden denenir
+		}
 		return Status{Connected: true, Profile: p.Name}, nil
 	}
 	return Status{}, errors.New("hicbir strateji calismadi")
