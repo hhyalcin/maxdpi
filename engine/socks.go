@@ -25,6 +25,7 @@ type Frontend struct {
 	resolver *Resolver
 	upstream proxy.ContextDialer
 	wg       sync.WaitGroup
+	sem      chan struct{} // es zamanli baglanti siniri (yerel DoS)
 
 	mu     sync.Mutex
 	conns  map[net.Conn]struct{} // Close() aktif baglantilari kapatabilsin
@@ -48,6 +49,9 @@ func (f *Frontend) untrack(c net.Conn) {
 	f.mu.Unlock()
 }
 
+// maxConns: Discord (ses, CDN, guncelleme) icin yeterli; yerel bir surecin sinirsiz goroutine acmasini engeller.
+const maxConns = 512
+
 // StartFrontend: yalnizca 127.0.0.1 uzerinde rastgele portta dinler.
 func StartFrontend(upstreamAddr string, r *Resolver) (*Frontend, error) {
 	d, err := proxy.SOCKS5("tcp", upstreamAddr, nil, &net.Dialer{Timeout: 8 * time.Second})
@@ -62,7 +66,7 @@ func StartFrontend(upstreamAddr string, r *Resolver) (*Frontend, error) {
 	if err != nil {
 		return nil, err
 	}
-	f := &Frontend{ln: ln, resolver: r, upstream: cd, conns: make(map[net.Conn]struct{})}
+	f := &Frontend{ln: ln, resolver: r, upstream: cd, sem: make(chan struct{}, maxConns), conns: make(map[net.Conn]struct{})}
 	f.wg.Add(1)
 	go f.serve()
 	return f, nil
@@ -89,9 +93,16 @@ func (f *Frontend) serve() {
 		if err != nil {
 			return
 		}
+		select {
+		case f.sem <- struct{}{}:
+		default:
+			_ = c.Close() // sinir dolu
+			continue
+		}
 		f.wg.Add(1)
 		go func() {
 			defer f.wg.Done()
+			defer func() { <-f.sem }()
 			f.handle(c)
 		}()
 	}
@@ -113,8 +124,13 @@ func init() {
 	if os.MkdirAll(dir, 0o700) != nil {
 		return
 	}
+	path := filepath.Join(dir, "debug.log")
+	flags := os.O_CREATE | os.O_APPEND | os.O_WRONLY
+	if st, err := os.Stat(path); err == nil && st.Size() > 1<<20 {
+		flags |= os.O_TRUNC // gunluk 1 MiB'i asarsa sifirla (donusum yok, sinirsiz buyumesin)
+	}
 	// #nosec G304 -- yol UserCacheDir + sabit ad
-	if f, err := os.OpenFile(filepath.Join(dir, "debug.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
+	if f, err := os.OpenFile(path, flags, 0o600); err == nil {
 		log.SetOutput(f)
 	}
 }
@@ -333,7 +349,28 @@ func (f *Frontend) dial(ctx context.Context, host string, isIP bool, port int) (
 		return f.upstream.DialContext(ctx, "tcp", net.JoinHostPort(host, ps))
 	}
 	if !isDiscordHost(host) {
-		return (&net.Dialer{Timeout: 8 * time.Second}).DialContext(ctx, "tcp", net.JoinHostPort(host, ps))
+		// Dogrudan baglanti ama yalnizca genel IP'lere: "localhost" gibi adlarla yerel/ozel aga cikilmasin.
+		addrs, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+		if err != nil {
+			return nil, err
+		}
+		var last error = errors.New("genel adres yok")
+		tried := 0
+		for _, a := range addrs {
+			if !isPublicIP(a.IP) {
+				continue
+			}
+			if tried == 3 {
+				break
+			}
+			tried++
+			conn, err := (&net.Dialer{Timeout: 8 * time.Second}).DialContext(ctx, "tcp", net.JoinHostPort(a.IP.String(), ps))
+			if err == nil {
+				return conn, nil
+			}
+			last = err
+		}
+		return nil, last
 	}
 	ips, err := f.resolver.Lookup(ctx, host)
 	if err != nil {

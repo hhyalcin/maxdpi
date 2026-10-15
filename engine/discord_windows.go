@@ -5,6 +5,7 @@ package engine
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,8 +14,33 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )
+
+// unelevated: uygulama yonetici yetkisiyle calisirken Discord'u yukseltilmis baslatmamak icin Explorer'i (yetkisiz,
+// kullanici yetkili) ebeveyn surec yapar; yeni surec ebeveynin belirtecini alir. Explorer bulunamazsa baslatmayiz.
+// Donen kapatici, cmd.Start'tan sonra cagrilmali.
+func unelevated(cmd *exec.Cmd) (func(), error) {
+	noop := func() {}
+	if !IsElevated() {
+		return noop, nil
+	}
+	hwnd := windows.GetShellWindow()
+	var pid uint32
+	if hwnd == 0 {
+		return noop, errors.New("Explorer bulunamadi: Discord yetkisiz baslatilamiyor")
+	}
+	if _, err := windows.GetWindowThreadProcessId(hwnd, &pid); err != nil || pid == 0 {
+		return noop, errors.New("Explorer sureci bulunamadi: Discord yetkisiz baslatilamiyor")
+	}
+	h, err := windows.OpenProcess(windows.PROCESS_CREATE_PROCESS, false, pid)
+	if err != nil {
+		return noop, fmt.Errorf("Explorer acilamadi: %w", err)
+	}
+	cmd.SysProcAttr = &syscall.SysProcAttr{ParentProcess: syscall.Handle(h)}
+	return func() { _ = windows.CloseHandle(h) }, nil
+}
 
 func updateExe() (string, error) {
 	la := os.Getenv("LOCALAPPDATA")
@@ -30,7 +56,7 @@ func updateExe() (string, error) {
 
 // DiscordRunning: Discord zaten aciksa ortam degiskenleri ve proxy argumani uygulanamaz.
 func DiscordRunning() bool {
-	tl := filepath.Join(os.Getenv("SystemRoot"), "System32", "tasklist.exe")
+	tl := filepath.Join(systemDir(), "tasklist.exe")
 	// #nosec G204 -- sabit sistem programi ve sabit argumanlar
 	out, err := exec.Command(tl, "/FI", "IMAGENAME eq Discord.exe", "/NH", "/FO", "CSV").Output()
 	return err == nil && strings.Contains(string(out), "Discord.exe")
@@ -61,6 +87,11 @@ func LaunchDiscord(proxyAddr string) error {
 	// #nosec G204 -- yol LOCALAPPDATA altindaki Update.exe; proxyAddr kendi loopback adresimiz
 	cmd := exec.Command(update, "--processStart", "Discord.exe", "--process-start-args", "--proxy-server="+u)
 	cmd.Env = append(os.Environ(), "HTTPS_PROXY="+u, "HTTP_PROXY="+u, "https_proxy="+u, "http_proxy="+u)
+	closeParent, err := unelevated(cmd)
+	if err != nil {
+		return err
+	}
+	defer closeParent()
 	if err := cmd.Start(); err != nil {
 		return err
 	}
@@ -79,6 +110,11 @@ func LaunchDiscordDirect() error {
 	}
 	// #nosec G204 -- yol LOCALAPPDATA altindaki Update.exe, sabit argumanlar
 	cmd := exec.Command(update, "--processStart", "Discord.exe")
+	closeParent, err := unelevated(cmd)
+	if err != nil {
+		return err
+	}
+	defer closeParent()
 	if err := cmd.Start(); err != nil {
 		return err
 	}

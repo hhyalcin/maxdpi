@@ -4,6 +4,7 @@ package engine
 
 import (
 	"bytes"
+	"crypto/sha256"
 	_ "embed"
 	"errors"
 	"fmt"
@@ -14,13 +15,14 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
 
 // GoodbyeDPI 0.2.3rc3 (TR) + WinDivert 2.2 (x86_64). Paket seviyesinde calisir: Discord'un guncelleyicisi
 // dahil hicbir surecin proxy ayarina bakmasi gerekmez. Yonetici izni gerekir (WinDivert surucusu).
-// Lisanslar: licenses/third_party.
+// Kaynak ve SHA-256: THIRD_PARTY.md. Lisanslar: licenses/third_party.
 var (
 	//go:embed gdpi_windows/goodbyedpi.exe
 	gdpiExe []byte
@@ -30,12 +32,13 @@ var (
 	gdpiSys []byte
 )
 
-// Yandex DNS 1253 portu: ISS'nin DNS zehirlemesini asar (dip/turkey_dnsredir*.cmd ile ayni).
+// Yandex DNS 1253 portu: ISS'nin DNS zehirlemesini asar (GoodbyeDPI-Turkey turkey_dnsredir*.cmd ile ayni).
+// Dikkat: sistemin TUM DNS sorgulari (yalniz Discord degil) sifresiz UDP ile Yandex'e gider (README: Gizlilik).
 var gdpiDNS = []string{"--dns-addr", "77.88.8.8", "--dns-port", "1253", "--dnsv6-addr", "2a02:6b8::feed:0ff", "--dnsv6-port", "1253"}
 
 func gdpiArgs(mode ...string) []string { return append(append([]string{}, mode...), gdpiDNS...) }
 
-// DefaultProfiles: dip/turkey_dnsredir*.cmd on ayarlari (siralama = deneme sirasi). Son ikisi DNS yonlendirmesiz.
+// DefaultProfiles: GoodbyeDPI-Turkey turkey_dnsredir*.cmd on ayarlari (siralama = deneme sirasi). Son ikisi DNS yonlendirmesiz.
 var DefaultProfiles = []Profile{
 	{Name: "gdpi-9+dns", Args: gdpiArgs("-9")},
 	{Name: "gdpi-5+dns", Args: gdpiArgs("-5")},
@@ -78,26 +81,70 @@ func (s *syncBuf) String() string {
 }
 
 func writeIfDifferent(path string, data []byte) error {
-	// #nosec G304 -- yol kullanici girdisi degil: UserCacheDir + sabit ad
+	// #nosec G304 -- yol kullanici girdisi degil: yonetici-yazilabilir sabit dizin + sabit ad
 	if cur, err := os.ReadFile(path); err == nil && bytes.Equal(cur, data) {
 		return nil
 	}
 	tmp := path + ".tmp"
-	// #nosec G306 -- calistirilabilir; dizin kullaniciya ozel
+	// #nosec G306 -- calistirilabilir; dizin yalnizca Yoneticiler/SYSTEM tarafindan yazilabilir
 	if err := os.WriteFile(tmp, data, 0o700); err != nil {
 		return err
 	}
 	return os.Rename(tmp, path)
 }
 
-// extractGDPI: gomulu dosyalari %LOCALAPPDATA%\maxdpi\gdpi altina cikarir (surucu dll ile ayni dizinde olmali).
-func extractGDPI() (string, error) {
-	base, err := os.UserCacheDir()
+// gdpiDirSDDL: yalnizca SYSTEM ve Yoneticiler tam yetkili, miras kapali. Yonetici yetkisiyle calisan ikililer
+// kullanici-yazilabilir bir dizinden calistirilirsa standart kullanici sureci yetki yukseltebilir.
+const gdpiDirSDDL = "D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"
+
+// secureGDPIDir: %ProgramData%\maxdpi-gdpi dizinini kisitli DACL ile atomik olusturur. Onceden varsa
+// (baska biri onceden olusturmus olabilir) reparse point olmadigini ve sahibinin Yoneticiler/SYSTEM oldugunu dogrular.
+func secureGDPIDir() (string, error) {
+	base, err := windows.KnownFolderPath(windows.FOLDERID_ProgramData, windows.KF_FLAG_DEFAULT)
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(base, "maxdpi", "gdpi")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	dir := filepath.Join(base, "maxdpi-gdpi")
+	sd, err := windows.SecurityDescriptorFromString(gdpiDirSDDL)
+	if err != nil {
+		return "", err
+	}
+	sa := &windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), SecurityDescriptor: sd}
+	p, err := windows.UTF16PtrFromString(dir)
+	if err != nil {
+		return "", err
+	}
+	if err := windows.CreateDirectory(p, sa); err != nil && !errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
+		return "", err
+	}
+	attrs, err := windows.GetFileAttributes(p)
+	if err != nil {
+		return "", err
+	}
+	if attrs&windows.FILE_ATTRIBUTE_DIRECTORY == 0 || attrs&windows.FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+		return "", fmt.Errorf("%s guvenli bir dizin degil", dir)
+	}
+	osd, err := windows.GetNamedSecurityInfo(dir, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION)
+	if err != nil {
+		return "", err
+	}
+	owner, _, err := osd.Owner()
+	if err != nil || owner == nil {
+		return "", fmt.Errorf("%s sahibi okunamadi", dir)
+	}
+	for _, t := range []windows.WELL_KNOWN_SID_TYPE{windows.WinBuiltinAdministratorsSid, windows.WinLocalSystemSid} {
+		if sid, err := windows.CreateWellKnownSid(t); err == nil && owner.Equals(sid) {
+			return dir, nil
+		}
+	}
+	return "", fmt.Errorf("%s sahibi Yoneticiler/SYSTEM degil: dizini silip yeniden deneyin", dir)
+}
+
+// extractGDPI: gomulu dosyalari yonetici-yazilabilir dizine cikarir (surucu dll ile ayni dizinde olmali) ve
+// calistirmadan once SHA-256 ile gomulu bayt'lara karsi dogrular.
+func extractGDPI() (string, error) {
+	dir, err := secureGDPIDir()
+	if err != nil {
 		return "", err
 	}
 	files := []struct {
@@ -105,16 +152,31 @@ func extractGDPI() (string, error) {
 		data []byte
 	}{{"goodbyedpi.exe", gdpiExe}, {"WinDivert.dll", gdpiDLL}, {"WinDivert64.sys", gdpiSys}}
 	for _, f := range files {
-		if err := writeIfDifferent(filepath.Join(dir, f.name), f.data); err != nil {
+		path := filepath.Join(dir, f.name)
+		if err := writeIfDifferent(path, f.data); err != nil {
 			return "", fmt.Errorf("%s yazilamadi (antivirus karantinasi olabilir): %w", f.name, err)
+		}
+		// #nosec G304 -- ayni sabit yol
+		got, err := os.ReadFile(path)
+		if err != nil || sha256.Sum256(got) != sha256.Sum256(f.data) {
+			return "", fmt.Errorf("%s dogrulanamadi", f.name)
 		}
 	}
 	return dir, nil
 }
 
+// systemDir: System32 yolu API'den alinir; SystemRoot ortam degiskeni kullanici tarafindan degistirilebilir.
+func systemDir() string {
+	d, err := windows.GetSystemDirectory()
+	if err != nil {
+		return `C:\Windows\System32`
+	}
+	return d
+}
+
 func runHidden(name string, args ...string) {
 	// #nosec G204 -- sabit sistem programlari ve sabit argumanlar
-	cmd := exec.Command(filepath.Join(os.Getenv("SystemRoot"), "System32", name), args...)
+	cmd := exec.Command(filepath.Join(systemDir(), name), args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: windows.CREATE_NO_WINDOW}
 	_ = cmd.Run()
 }

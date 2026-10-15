@@ -138,6 +138,7 @@ func TestFrontendHTTPConnectRejects(t *testing.T) {
 		{"loopback IP", "CONNECT 127.0.0.1:443 HTTP/1.1\r\nHost: x\r\n\r\n", "HTTP/1.1 502 Bad Gateway"},
 		{"izinsiz port", "CONNECT 8.8.8.8:22 HTTP/1.1\r\nHost: x\r\n\r\n", "HTTP/1.1 403 Forbidden"},
 		{"GET reddi", "GET http://example.com/ HTTP/1.1\r\nHost: x\r\n\r\n", "HTTP/1.1 405 Method Not Allowed"},
+		{"localhost adi", "CONNECT localhost:443 HTTP/1.1\r\nHost: x\r\n\r\n", "HTTP/1.1 502 Bad Gateway"},
 		{"IPv6 literal", "CONNECT [::1]:443 HTTP/1.1\r\nHost: x\r\n\r\n", "HTTP/1.1 403 Forbidden"},
 	}
 	for _, c := range cases {
