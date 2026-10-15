@@ -41,14 +41,16 @@ macOS 15 (Sequoia) ve sonrasında sağ tık > Aç yöntemi artık işe yaramaz; 
 | 3 | SmartScreen | "Windows bilgisayarınızı korudu" | **Ek bilgi > Yine de çalıştır** (uygulama imzasız) |
 | 3b | Alternatif | Mavi ekran hiç çıkmadan engellenirse | Dosya > Sağ tık > Özellikler > en altta **Engellemeyi kaldır** > Uygula. Ya da: `Unblock-File .\maxdpi.exe` |
 | 4 | Yönetici izni | UAC: "Bu uygulamanın cihazınızda değişiklik yapmasına izin vermek istiyor musunuz?" (yayıncı: Bilinmeyen) | **Evet** de. Paket filtresi (WinDivert) sürücüsü için zorunludur, izin vermezsen Bağlan çalışmaz |
-| 5 | Antivirüs | Defender "Tehdit bulundu"; `WinDivert64.sys` veya `goodbyedpi.exe` karantinaya alındı | Paket yakalayan sürücüler sık yanlış pozitif verir. Dosyayı **özetle doğruladıysan** karantinadan **geri yükle** ve yalnız şu klasörü dışlamaya ekle: `%LOCALAPPDATA%\maxdpi` (**Windows Güvenliği > Virüs ve tehdit koruması > Ayarları yönet > Dışlamalar**). Tüm sürücüyü dışlama. Kaspersky ile çalışmaz; farklı antivirüs kullan veya MaxDPI'ı dışla |
+| 5 | Antivirüs | Defender "Tehdit bulundu"; `WinDivert64.sys` veya `goodbyedpi.exe` karantinaya alındı | Paket yakalayan sürücüler sık yanlış pozitif verir. Dosyayı **özetle doğruladıysan** karantinadan **geri yükle** ve yalnız şu klasörü dışlamaya ekle: `%ProgramData%\maxdpi-gdpi` (**Windows Güvenliği > Virüs ve tehdit koruması > Ayarları yönet > Dışlamalar**). Tüm sürücüyü dışlama. Kaspersky ile çalışmaz; farklı antivirüs kullan veya MaxDPI'ı dışla |
 | 6 | WebView2 | "WebView2 Runtime gerekli" | Win 11'de hazırdır. Win 10'da Microsoft'un "Evergreen Bootstrapper" kurulumunu çalıştır |
 | 7 | Kullan | | Discord'u tamamen kapat (tepsideki simge dahil), MaxDPI'da **Bağlan**, ardından Discord'u MaxDPI'dan aç |
 
 Notlar:
 - Başka bir GoodbyeDPI / WinDivert / zapret çalışıyorsa çakışır. Önce onları kapat. MaxDPI kendi `goodbyedpi.exe` süreçlerini temizler.
 - **Bağlan** birkaç strateji dener, 1 dakikayı bulabilir. Hata verirse mesajdaki "son hata" bilgisini ve günlükleri paylaş: `MAXDPI_DEBUG=1` ile çalıştırınca `%LOCALAPPDATA%\maxdpi\debug.log`; pencere hiç açılmazsa aynı klasördeki `startup.log`.
-- Windows'ta Discord, MaxDPI bağlıyken proxy'siz açılır; sistem proxy'si değiştirilmez.
+- Windows'ta Discord, MaxDPI bağlıyken proxy'siz ve yönetici olmadan (Explorer üzerinden) açılır; sistem proxy'si değiştirilmez.
+- **Gizlilik:** ilk dört profil sistemin **tüm** DNS sorgularını şifresiz olarak Yandex DNS'e (`77.88.8.8:1253`) yönlendirir; son iki profil yönlendirmez. Bağlantıyı kesince durur. Ayrıntı: README "Gizlilik ve güvenlik notları".
+- Eski sürümlerden kalan `%LOCALAPPDATA%\maxdpi\gdpi` klasörü artık kullanılmaz, silebilirsin.
 - Kurumsal/okul bilgisayarı: AppLocker veya Grup İlkesi `%LOCALAPPDATA%` altındaki exe/sürücüleri engelleyebilir. Bu durumda BT yöneticisiyle görüş; kendin atlatmaya çalışma.
 
 ---
